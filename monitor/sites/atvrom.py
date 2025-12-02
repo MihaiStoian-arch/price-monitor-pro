@@ -1,30 +1,48 @@
-# monitor/sites/atvrom.py
-
-import re
-from decimal import Decimal
+import cloudscraper
 from bs4 import BeautifulSoup
-
-from monitor.utils.requester import fetch_page
-from monitor.price_extractor import extract_price_from_text
-
+import re
 
 def scrape_atvrom(url: str):
-    """
-    Returnează prețul final în RON de pe ATVROM.
-    """
-    html = fetch_page(url)
-    if html is None:
+    try:
+        scraper = cloudscraper.create_scraper(
+            browser={
+                "browser": "chrome",
+                "platform": "windows",
+                "mobile": False
+            }
+        )
+
+        response = scraper.get(url)
+
+        if response.status_code != 200:
+            print(f"[ATVROM] Status code: {response.status_code}")
+            return None
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Selector corect pentru pret:
+        node = soup.select_one("h6.text-nowrap")
+        if not node:
+            print("[ATVROM] Nu am găsit elementul h6.text-nowrap")
+            return None
+
+        text = node.get_text(" ", strip=True)
+
+        # extragere număr ex: "15.448 RON"
+        match = re.search(r"([\d\.\, ]+)\s*RON", text)
+        if not match:
+            print("[ATVROM] Regex nu a găsit preț în text:", text)
+            return None
+
+        cleaned = (
+            match.group(1)
+            .replace(" ", "")
+            .replace(".", "")
+            .replace(",", ".")
+        )
+
+        return float(cleaned)
+
+    except Exception as e:
+        print("[ATVROM] Eroare:", e)
         return None
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    # 1. Selectorul specific ATVROM (cel mai stabil)
-    price_node = soup.select_one("h6.text-nowrap")
-    if price_node:
-        price = extract_price_from_text(price_node.get_text(" ", strip=True))
-        if price:
-            return price
-
-    # 2. Fallback – caută în orice text
-    return extract_price_from_text(soup.get_text(" ", strip=True))
-
