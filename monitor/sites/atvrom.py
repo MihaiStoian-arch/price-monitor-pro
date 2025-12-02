@@ -13,6 +13,8 @@ def scrape_atvrom(url: str):
         )
 
         response = scraper.get(url)
+        print(response.text[:5000])
+
 
         if response.status_code != 200:
             print(f"[ATVROM] Status code: {response.status_code}")
