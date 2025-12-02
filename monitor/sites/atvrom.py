@@ -8,32 +8,55 @@ def scrape_atvrom(url: str):
             browser={
                 "browser": "chrome",
                 "platform": "windows",
-                "mobile": False
+                "desktop": True
             }
         )
 
-        response = scraper.get(url)
-        print(response.text[:5000])
+        # headers reale de browser
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache"
+        }
 
+        response = scraper.get(url, headers=headers)
 
         if response.status_code != 200:
-            print(f"[ATVROM] Status code: {response.status_code}")
+            print(f"[ATVROM] Status: {response.status_code}")
             return None
+
+        # DEBUG: salvăm HTML într-un fișier
+        with open("atvrom_debug.html", "w", encoding="utf-8") as f:
+            f.write(response.text)
 
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Selector corect pentru pret:
-        node = soup.select_one("h6.text-nowrap")
-        if not node:
-            print("[ATVROM] Nu am găsit elementul h6.text-nowrap")
+        # selector alternativ pentru pret (am testat în browser)
+        selectors = [
+            "h6.text-nowrap",
+            "div.product-price h6",
+            "span.price-new",
+            "span[itemprop='price']",
+            ".product-price",
+        ]
+
+        price_node = None
+        for sel in selectors:
+            price_node = soup.select_one(sel)
+            if price_node:
+                break
+
+        if not price_node:
+            print("[ATVROM] Nu am găsit niciun selector de preț.")
             return None
 
-        text = node.get_text(" ", strip=True)
+        text = price_node.get_text(" ", strip=True)
 
-        # extragere număr ex: "15.448 RON"
         match = re.search(r"([\d\.\, ]+)\s*RON", text)
         if not match:
-            print("[ATVROM] Regex nu a găsit preț în text:", text)
+            print("[ATVROM] Regex ratat. Text =", text)
             return None
 
         cleaned = (
