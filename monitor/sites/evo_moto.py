@@ -1,71 +1,49 @@
-import cloudscraper
+import requests
 from bs4 import BeautifulSoup
-import re
 from decimal import Decimal
 from typing import Optional
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-    "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+    "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-def _to_decimal(val: str) -> Optional[Decimal]:
-    try:
-        clean = (
-            val.replace("Lei", "")
-               .replace("LEI", "")
-               .replace("lei", "")
-               .replace(" ", "")
-               .replace(".", "")
-               .replace(",", ".")
-        )
-        return Decimal(clean)
-    except:
-        return None
-
-
 def scrape_evomoto(url: str, timeout: int = 12) -> Optional[Decimal]:
-    try:
-        scraper = cloudscraper.create_scraper(
-            browser={
-                "browser": "chrome",
-                "platform": "windows",
-                "mobile": False
-            }
-        )
-
-        r = scraper.get(url, headers=HEADERS, timeout=timeout)
-
-    except Exception as e:
-        print("[EVOMOTO] Request failed:", e)
-        return None
+    # 1. Luăm pagina (poate fi Cloudflare, nu contează)
+    r = requests.get(url, headers=HEADERS, timeout=timeout)
 
     if r.status_code != 200:
-        print(f"[EVOMOTO] Status {r.status_code} for {url}")
+        print("[EVOMOTO] Status", r.status_code)
         return None
 
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Căutăm orice element care conține "Lei"
-    node = soup.find(lambda tag: tag.name in ("span", "div", "p") 
-                     and "lei" in tag.get_text().lower())
-
-    if not node:
-        print("[EVOMOTO] Nu am găsit prețul în lei.")
+    # 2. Cautăm ID-ul produsului
+    product_div = soup.find("div", {"id": "product-detail"})
+    if not product_div:
+        print("[EVOMOTO] Nu pot găsi containerul de produs.")
         return None
 
-    text = node.get_text(" ", strip=True)
-
-    # Regex pentru 12.345,67 Lei
-    match = re.search(r"([\d\.\, ]+)\s*Lei", text, flags=re.IGNORECASE)
-    if not match:
-        print("[EVOMOTO] Regex nu a găsit preț în text:", text)
+    product_id = product_div.get("data-product-id")
+    if not product_id:
+        print("[EVOMOTO] Nu pot găsi product_id.")
         return None
 
-    value = _to_decimal(match.group(1))
-    if value is None:
-        print("[EVOMOTO] Nu pot converti la Decimal:", match.group(1))
+    # 3. API intern pentru preț
+    api_url = f"https://evo-moto.ro/product/getprice/{product_id}"
+
+    r2 = requests.get(api_url, headers=HEADERS, timeout=timeout)
+
+    if r2.status_code != 200:
+        print("[EVOMOTO] API price status", r2.status_code)
         return None
 
-    return value
+    try:
+        data = r2.json()
+        price = data.get("price")
+        if price:
+            return Decimal(str(price))
+    except Exception as e:
+        print("[EVOMOTO] JSON parse error:", e)
+
+    return None
