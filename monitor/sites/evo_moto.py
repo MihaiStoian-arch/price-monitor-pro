@@ -1,29 +1,31 @@
-import cloudscraper
+import requests
 from bs4 import BeautifulSoup
+import re
 from decimal import Decimal
-import json
 from typing import Optional
 
-def _to_decimal(v) -> Optional[Decimal]:
-    if v is None:
-        return None
-    s = str(v).replace(" ", "").replace(",", "").replace(".", "")
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+    "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+def _to_decimal(val: str) -> Optional[Decimal]:
     try:
-        return Decimal(s)
+        clean = (
+            val.replace("Lei", "")
+               .replace("LEI", "")
+               .replace("lei", "")
+               .replace(" ", "")
+               .replace(".", "")
+               .replace(",", ".")
+        )
+        return Decimal(clean)
     except:
         return None
 
-def scrape_evomoto(url: str):
-    scraper = cloudscraper.create_scraper(
-        browser={
-            "browser": "chrome",
-            "platform": "windows",
-            "mobile": False
-        }
-    )
-
+def scrape_evomoto(url: str, timeout: int = 12) -> Optional[Decimal]:
     try:
-        r = scraper.get(url)
+        r = requests.get(url, headers=HEADERS, timeout=timeout)
     except Exception as e:
         print("[EVOMOTO] Request failed:", e)
         return None
@@ -34,27 +36,24 @@ def scrape_evomoto(url: str):
 
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Caută JSON-LD ca la ATVROM
-    scripts = soup.find_all("script", {"type": "application/ld+json"})
-    for s in scripts:
-        raw = s.string
-        if not raw:
-            continue
-        try:
-            data = json.loads(raw)
-        except:
-            continue
+    # Căutăm orice element care conține "Lei"
+    node = soup.find(lambda tag: tag.name in ("span","div","p") and "lei" in tag.get_text().lower())
 
-        if isinstance(data, dict) and data.get("@type") == "Product":
-            offers = data.get("offers")
-            if not offers:
-                continue
+    if not node:
+        print("[EVOMOTO] Nu am găsit prețul în lei.")
+        return None
 
-            price = None
-            if isinstance(offers, dict):
-                price = offers.get("price")
-            if price:
-                return Decimal(price)
+    text = node.get_text(" ", strip=True)
 
-    print("[EVOMOTO] No price found")
-    return None
+    # Regex robust: extrage 12.345,67 înainte de "Lei"
+    match = re.search(r"([\d\.\, ]+)\s*Lei", text, flags=re.IGNORECASE)
+    if not match:
+        print("[EVOMOTO] Regex nu a găsit preț în text:", text)
+        return None
+
+    value = _to_decimal(match.group(1))
+    if value is None:
+        print("[EVOMOTO] Nu pot converti la Decimal:", match.group(1))
+        return None
+
+    return value
