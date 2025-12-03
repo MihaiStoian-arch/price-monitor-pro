@@ -1,25 +1,42 @@
 import cloudscraper
 from bs4 import BeautifulSoup
-from decimal import Decimal
 import re
+from decimal import Decimal
+from typing import Optional
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "ro-RO,ro;q=0.9,en;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+    "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8",
 }
 
-def scrape_evomoto(url: str):
-    scraper = cloudscraper.create_scraper(
-        browser={
-            "browser": "chrome",
-            "platform": "windows",
-            "mobile": False
-        }
-    )
-
+def _to_decimal(val: str) -> Optional[Decimal]:
     try:
-        r = scraper.get(url, headers=HEADERS)
+        clean = (
+            val.replace("Lei", "")
+               .replace("LEI", "")
+               .replace("lei", "")
+               .replace(" ", "")
+               .replace(".", "")
+               .replace(",", ".")
+        )
+        return Decimal(clean)
+    except:
+        return None
+
+
+def scrape_evomoto(url: str, timeout: int = 12) -> Optional[Decimal]:
+    try:
+        scraper = cloudscraper.create_scraper(
+            browser={
+                "browser": "chrome",
+                "platform": "windows",
+                "mobile": False
+            }
+        )
+
+        r = scraper.get(url, headers=HEADERS, timeout=timeout)
+
     except Exception as e:
         print("[EVOMOTO] Request failed:", e)
         return None
@@ -30,22 +47,25 @@ def scrape_evomoto(url: str):
 
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Caută prețul în lei
-    price_node = soup.find("span", class_="price-lei-text")
-    if not price_node:
-        print("[EVOMOTO] No price found")
+    # Căutăm orice element care conține "Lei"
+    node = soup.find(lambda tag: tag.name in ("span", "div", "p") 
+                     and "lei" in tag.get_text().lower())
+
+    if not node:
+        print("[EVOMOTO] Nu am găsit prețul în lei.")
         return None
 
-    text = price_node.get_text(strip=True)
+    text = node.get_text(" ", strip=True)
 
-    # Extrage număr (ex: 31.500 Lei)
-    match = re.search(r"([\d\.\, ]+)", text)
+    # Regex pentru 12.345,67 Lei
+    match = re.search(r"([\d\.\, ]+)\s*Lei", text, flags=re.IGNORECASE)
     if not match:
-        print("[EVOMOTO] Regex fail:", text)
+        print("[EVOMOTO] Regex nu a găsit preț în text:", text)
         return None
 
-    cleaned = match.group(1).replace(".", "").replace(" ", "").replace(",", ".")
-    try:
-        return Decimal(cleaned)
-    except:
+    value = _to_decimal(match.group(1))
+    if value is None:
+        print("[EVOMOTO] Nu pot converti la Decimal:", match.group(1))
         return None
+
+    return value
