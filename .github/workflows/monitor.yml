@@ -1,0 +1,58 @@
+# Numele workflow-ului care va aparea in tab-ul "Actions"
+name: Price Monitor Daily Run
+
+# -------------------------------------------------------------
+# 1. SCHEDULE (CRON JOB)
+# -------------------------------------------------------------
+# Ruleaza in fiecare zi la ora 02:00 UTC
+# Atentie: 02:00 UTC este 05:00 AM ora Romaniei (in timpul iernii)
+# Daca vrei 02:00 AM ora Romaniei, foloseste 23:00 (11 PM) UTC in ziua precedenta.
+# Voi folosi 02:00 UTC pentru a mentine codul simplu, ajustati ora daca este necesar.
+on:
+  schedule:
+    # Ruleaza la minutul 0, ora 2, in fiecare zi
+    - cron: '0 0 * * *' 
+  # Permite rularea manuala din interfata GitHub
+  workflow_dispatch:
+
+# -------------------------------------------------------------
+# 2. JOBUL PRINCIPAL (Ruleaza pe un server Ubuntu)
+# -------------------------------------------------------------
+jobs:
+  run_scraper:
+    # Ruleaza pe cel mai recent server Ubuntu disponibil
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Descarca codul din repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Seteaza mediul Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Poti ajusta la versiunea pe care o folosesti local
+
+      # 3. Instaleaza dependentele din requirements.txt
+      # Presupune ca ai un fisier requirements.txt in radacina proiectului
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      # 4. Creeaza fisierul de credentiale din Secret
+      # Secretul creat anterior (GCP_CREDENTIALS) este decodat si salvat
+      # in directorul proiectului, acolo unde il cauta scriptul tau.
+      - name: Create Google Sheets Credentials File
+        env:
+          # Variabila de mediu care contine continutul JSON din GitHub Secret
+          CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS }}
+        run: |
+          # Scrie continutul variabilei de mediu in fisierul asteptat de gspread
+          echo "$CREDENTIALS_JSON" > service_account_credentials.json
+
+      # 5. Ruleaza scriptul Python
+      # Scriptul va face scraping, va actualiza foaia si va trimite alertele de pret
+      - name: Run Main Script
+        run: python main.py
