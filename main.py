@@ -2,6 +2,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
+import requests
 # --- IMPORTURI PENTRU EMAIL ---
 import smtplib
 from email.mime.text import MIMEText
@@ -48,6 +49,12 @@ SCRAPER_COORDS = {
 # Coloana pentru Timestamp-ul general (Coloana P)
 TIMESTAMP_COL_INDEX = 16 
 
+def get_public_ip():
+    response = requests.get('https://ifconfig.me/ip', timeout=5)
+    if response.status_code == 200:
+        return response.text.strip()
+    return "N/A (Eroare de raspuns)"
+
 # ----------------------------------------------------
 ## 2\. 🔑 Funcția de Conexiune
 
@@ -65,6 +72,10 @@ def setup_sheets_client():
         sheet = spreadsheet.worksheet(WORKSHEET_NAME) 
         
         print(f"✅ Conexiune reușită la foaia de lucru '{WORKSHEET_NAME}'.")
+
+        current_ip = get_public_ip()
+        print(f"🌐 IP-ul public de ieșire al Runner-ului: **{current_ip}**")
+        
         return sheet
     except Exception as e:
         print(f"❌ Eroare la inițializarea Google Sheets client: {e}")
