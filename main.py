@@ -211,9 +211,9 @@ def send_price_alerts(sheet):
 
 def monitor_and_update_sheet(sheet):
     """Citește link-urile, extrage prețurile și actualizează foaia."""
-    if sheet is None:
-        print("Oprire. Foaia de lucru nu a putut fi inițializată.")
-        return
+    if sheet is None:
+        print("Oprire. Foaia de lucru nu a putut fi inițializată.")
+        return
 
     # --- NOU: Preîncărcarea Prețurilor ATVROM (din XML) ---
     print("\n--- 1. Preîncărcarea Prețurilor ATVROM din XML ---")
