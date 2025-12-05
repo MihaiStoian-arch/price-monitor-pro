@@ -186,7 +186,7 @@ def send_price_alerts(sheet):
         email_body += "</table>"
         email_body += "<br>Vă rugăm să revizuiți strategia de preț."
         
-        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse cu Preț Mai Mic la Concurență"
+        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse Kawasaki cu Preț Mai Mic la Concurență"
         
         send_alert_email(subject, email_body) 
 
