@@ -18,7 +18,9 @@ SMTP_PORT = 587
 
 # ⚠️ Asigură-te că funcțiile de scraping sunt importate corect din directorul monitor/sites
 # Acestea sunt doar exemple. Adaptează-le la denumirile funcțiilor tale reale.
-from monitor.sites.atvrom import scrape_atvrom
+from monitor.sites.atvrom import get_atvrom_price_map
+def process_atvrom_link(url):
+    return None # Returnează None, deoarece prețul va fi preluat din harta globală
 from monitor.sites.evo_moto import scrape_evomoto
 from monitor.sites.moto4all import scrape_moto4all_prices
 from monitor.sites.motoboom import scrape_motoboom_prices
@@ -37,7 +39,7 @@ CREDENTIALS_FILE = 'service_account_credentials.json'
 # Harta: { Index Coloană Sursă (Link): [Index Coloană Destinație (Preț), Funcție Scraper] }
 # Coloana A = Index 1, B = 2, I = 9, O = 15, P = 16
 SCRAPER_COORDS = {
-    2: [9, scrape_atvrom],                 # B -> I
+    2: [9, process_atvrom_link],           # B -> I
     3: [10, scrape_evomoto],               # C -> J
     4: [11, scrape_moto4all_prices],       # D -> K
     5: [12, scrape_motoboom_prices],       # E -> L
@@ -208,104 +210,134 @@ def send_price_alerts(sheet):
 ## 3\. 🔄 Funcția de Monitorizare și Actualizare (Logică Nouă)
 
 def monitor_and_update_sheet(sheet):
-    """Citește link-urile, extrage prețurile și actualizează foaia."""
-    if sheet is None:
-        print("Oprire. Foaia de lucru nu a putut fi inițializată.")
-        return
+    """Citește link-urile, extrage prețurile și actualizează foaia."""
+    if sheet is None:
+        print("Oprire. Foaia de lucru nu a putut fi inițializată.")
+        return
 
-    # Citim toate datele de la rândul 2 în jos (excludem antetul)
-    try:
-        all_data = sheet.get_all_values()[1:] 
-    except Exception as e:
-        print(f"❌ Eroare la citirea datelor din foaie: {e}")
-        return
+    # --- NOU: Preîncărcarea Prețurilor ATVROM (din XML) ---
+    print("\n--- 1. Preîncărcarea Prețurilor ATVROM din XML ---")
+    try:
+        # Apelăm noua funcție care returnează harta {URL: Preț_cu_TVA}
+        atvrom_price_map = get_atvrom_price_map()
+        print(f"✅ Harta ATVROM preîncărcată cu {len(atvrom_price_map)} produse.")
+    except Exception as e:
+        print(f"❌ Eroare fatală la preîncărcarea hărții ATVROM: {e}")
+        atvrom_price_map = {}
+        # Dacă nu putem obține harta, nu putem actualiza ATVROM, dar putem continua cu competitorii.
 
-    updates = []
-    timestamp_val = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # Citim toate datele de la rândul 2 în jos (excludem antetul)
+    try:
+        all_data = sheet.get_all_values()[1:] 
+    except Exception as e:
+        print(f"❌ Eroare la citirea datelor din foaie: {e}")
+        return
 
-    print(f"\n--- Începe procesarea a {len(all_data)} produse ---")
+    updates = []
+    timestamp_val = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # Parcurgem fiecare rând (produs)
-    # **AICI SE TRECE DE LA O LINIE LA ALTA**
-    for row_index, row_data in enumerate(all_data):
-        # gsheet_row_num este numărul rândului în foaia de lucru (rândul 1 e antetul, deci începem de la 2)
-        gsheet_row_num = row_index + 2 
-        
-        # Numele produsului din coloana A (Index 0 în lista row_data)
-        product_name = row_data[0] 
+    print(f"\n--- 2. Începe procesarea a {len(all_data)} produse ---")
 
-        print(f"\n➡️ Procesează: {product_name} la rândul {gsheet_row_num}")
+    # Parcurgem fiecare rând (produs)
+    for row_index, row_data in enumerate(all_data):
+        gsheet_row_num = row_index + 2 
+        product_name = row_data[0] 
 
-        # Parcurgem harta de coordonate (B->I, C->J, etc.)
-        for src_col_idx, (dest_col_idx, extractor_func) in SCRAPER_COORDS.items():
-            
-            # Indexul coloanei de link în lista row_data (Indexul Python este cu 1 mai mic)
-            link_index_in_list = src_col_idx - 1 
-            
-            # Verificăm dacă link-ul există în datele citite și nu este gol
-            if link_index_in_list < len(row_data) and row_data[link_index_in_list]:
-                url = row_data[link_index_in_list]
+        print(f"\n➡️ Procesează: {product_name} la rândul {gsheet_row_num}")
+
+        # Parcurgem harta de coordonate
+        for src_col_idx, (dest_col_idx, extractor_func) in SCRAPER_COORDS.items():
+            
+            link_index_in_list = src_col_idx - 1 
+            
+            if link_index_in_list < len(row_data) and row_data[link_index_in_list]:
+                url = row_data[link_index_in_list]
+                scraper_name = url.split('/')[2] 
+
+                dest_col_letter = gspread.utils.rowcol_to_a1(1, dest_col_idx).split('1')[0]
+                cell_range = f'{dest_col_letter}{gsheet_row_num}'
+                price = None
                 
-                # Nume scurt pentru log
-                scraper_name = url.split('/')[2] 
-
-                print(f"   - Scrapează {scraper_name}...")
-                
-                try:
-                    price = extractor_func(url)
-                    
-                    if price is not None:
-                        # Formatează prețul la 2 zecimale
-                        price_str = f"{price:.2f}"
-                        
-                        # Calculează litera coloanei de destinație (ex: 9 -> I)
-                        dest_col_letter = gspread.utils.rowcol_to_a1(1, dest_col_idx).split('1')[0]
-                        
-                        # Adaugă Prețul la lista de actualizări
-                        updates.append({
-                            'range': f'{dest_col_letter}{gsheet_row_num}',
-                            'values': [[price_str]]
-                        })
-                        
-                        print(f"      ✅ Succes: {price_str} RON. Scris la {dest_col_letter}{gsheet_row_num}")
-                        
+                # --- LOGICĂ NOUĂ PENTRU ATVROM (INDEX 2) ---
+                if src_col_idx == 2:
+                    # Este coloana ATVROM (Link în B, Preț în I)
+                    print("   - Procesează ATVROM (XML)...")
+                    if url in atvrom_price_map:
+                        # Prețul este deja calculat cu TVA (string)
+                        price = atvrom_price_map[url] 
+                        print(f"      ✅ Succes: {price} RON (XML). Scris la {cell_range}")
                     else:
-                        print(f"      ❌ EROARE: Extragerea prețului a eșuat (returnat None) pentru {scraper_name}.")
+                        price = "N/A (SCOS DIN FEED)"
+                        print(f"      ❌ EROARE: Link-ul nu este în feed-ul XML.")
                         
-                except Exception as e:
-                    print(f"      🛑 EXCEPȚIE la scraping pentru {scraper_name}: {e}")
+                # --- LOGICĂ EXISTENTĂ PENTRU CEILALȚI COMPETITORI ---
+                else:
+                    # Executăm funcția de scraping pentru competitori
+                    print(f"   - Scrapează {scraper_name}...")
+                    try:
+                        price = extractor_func(url)
+                        
+                        if price is not None:
+                            # Formatează prețul la 2 zecimale (sau cum dorești pentru competitori)
+                            price_str = f"{price:.2f}"
+                            print(f"      ✅ Succes: {price_str} RON. Scris la {cell_range}")
+                        else:
+                            price_str = "N/A (SCRAPE ESUAT)"
+                            print(f"      ❌ EROARE: Extragerea prețului a eșuat (returnat None) pentru {scraper_name}.")
+                            price = price_str # pentru a adăuga mesajul de eroare în updates
+                        
+                    except Exception as e:
+                        price_str = f"🛑 EXCEPȚIE ({type(e).__name__})"
+                        print(f"      🛑 EXCEPȚIE la scraping pentru {scraper_name}: {e}")
+                        price = price_str
+                        
+                    time.sleep(1) # Pauză de 1 secundă între fiecare cerere de scraping (pentru competitori)
+                
+                
+                # --- Adăugare la lista de actualizări (Comună pentru ambele cazuri) ---
+                if price is not None:
+                    # Dacă prețul este un float/int, îl convertim în string pentru a fi scris.
+                    if isinstance(price, (float, int)):
+                         price = f"{price:.2f}"
+                         
+                    updates.append({
+                        'range': cell_range,
+                        'values': [[price]]
+                    })
 
-                time.sleep(1) # Pauză de 1 secundă între fiecare cerere de scraping (protecție împotriva blocării)
 
-    # ----------------------------------------
-    # Scrierea Batch în Google Sheets (la final)
-
+    # ----------------------------------------
+    # Scrierea Batch în Google Sheets (la final)
+    
+    # ... (Restul codului pentru timestamp și batch_update rămâne neschimbat) ...
+    # ... (Aici continuă codul tău neschimbat de la "Adaugă timestamp-ul final...") ...
+    
     # Adaugă timestamp-ul final în coloana P pentru toate rândurile procesate
-    if updates:
-        
-        # Determinăm litera coloanei P
-        timestamp_col_letter = gspread.utils.rowcol_to_a1(1, TIMESTAMP_COL_INDEX).split('1')[0] 
-        
-        # Rândul începe de la 2 și se termină la (len(all_data) + 1)
-        timestamp_range = f'{timestamp_col_letter}2:{timestamp_col_letter}{len(all_data) + 1}'
-        
-        # Creează o listă de liste pentru a scrie aceeași valoare pe toate rândurile
-        timestamp_values = [[timestamp_val] for _ in all_data]
-        
-        updates.append({
-            'range': timestamp_range,
-            'values': timestamp_values
-        })
-        
-        print(f"\n⚡ Se scriu {len(updates)} actualizări și timestamp-ul ({timestamp_val}) în foaie...")
-        
-        try:
-            sheet.batch_update(updates)
-            print("🎉 Toate prețurile și timestamp-ul au fost actualizate cu succes!")
-        except Exception as e:
-            print(f"❌ EROARE la scrierea în foaia de calcul: {e}")
-    else:
-        print("\nNu au fost găsite prețuri noi de actualizat.")
+    if updates:
+        
+        # Determinăm litera coloanei P
+        timestamp_col_letter = gspread.utils.rowcol_to_a1(1, TIMESTAMP_COL_INDEX).split('1')[0] 
+        
+        # Rândul începe de la 2 și se termină la (len(all_data) + 1)
+        timestamp_range = f'{timestamp_col_letter}2:{timestamp_col_letter}{len(all_data) + 1}'
+        
+        # Creează o listă de liste pentru a scrie aceeași valoare pe toate rândurile
+        timestamp_values = [[timestamp_val] for _ in all_data]
+        
+        updates.append({
+            'range': timestamp_range,
+            'values': timestamp_values
+        })
+        
+        print(f"\n⚡ Se scriu {len(updates)} actualizări și timestamp-ul ({timestamp_val}) în foaie...")
+        
+        try:
+            sheet.batch_update(updates)
+            print("🎉 Toate prețurile și timestamp-ul au fost actualizate cu succes!")
+        except Exception as e:
+            print(f"❌ EROARE la scrierea în foaia de calcul: {e}")
+    else:
+        print("\nNu au fost găsite prețuri noi de actualizat.")
 
 
 # ----------------------------------------------------
