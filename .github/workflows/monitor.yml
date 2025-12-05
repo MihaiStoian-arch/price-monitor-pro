@@ -55,4 +55,4 @@ jobs:
       # 5. Ruleaza scriptul Python
       # Scriptul va face scraping, va actualiza foaia si va trimite alertele de pret
       - name: Run Main Script
-        run: python main.py
+        run: python kawasaki_main.py
