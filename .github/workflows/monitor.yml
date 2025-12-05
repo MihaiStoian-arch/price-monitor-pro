@@ -51,6 +51,9 @@ jobs:
         run: |
           # Scrie continutul variabilei de mediu in fisierul asteptat de gspread
           echo "$CREDENTIALS_JSON" > service_account_credentials.json
+          echo "Public IP is:"
+          curl -s https://ifconfig.me
+          echo "" # adauga o linie noua pentru claritate
 
       # 5. Ruleaza scriptul Python
       # Scriptul va face scraping, va actualiza foaia si va trimite alertele de pret
