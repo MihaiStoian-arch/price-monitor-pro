@@ -11,7 +11,7 @@ name: Price Monitor Daily Run
 on:
   schedule:
     # Ruleaza la minutul 0, ora 2, in fiecare zi
-    - cron: '0 0 * * *' 
+    - cron: '50 12 * * *' 
   # Permite rularea manuala din interfata GitHub
   workflow_dispatch:
 
