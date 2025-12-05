@@ -30,7 +30,7 @@ from monitor.sites.jetskiadrenalin import get_jetskiadrenalin_price
 
 # --- Foaia de Calcul ---
 SPREADSHEET_NAME = 'Price Monitor ATVRom'   
-WORKSHEET_NAME = 'Price Monitor'    
+WORKSHEET_NAME = 'Can-Am'    
 CREDENTIALS_FILE = 'service_account_credentials.json'
 
 # Harta: { Index Coloană Sursă (Link): [Index Coloană Destinație (Preț), Funcție Scraper] }
@@ -186,7 +186,7 @@ def send_price_alerts(sheet):
         email_body += "</table>"
         email_body += "<br>Vă rugăm să revizuiți strategia de preț."
         
-        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse cu Preț Mai Mic la Concurență"
+        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse Can-Am cu Preț Mai Mic la Concurență"
         
         send_alert_email(subject, email_body) 
 
