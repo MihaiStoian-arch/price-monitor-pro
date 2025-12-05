@@ -210,7 +210,7 @@ def send_price_alerts(sheet):
 ## 3\. 🔄 Funcția de Monitorizare și Actualizare (Logică Nouă)
 
 def monitor_and_update_sheet(sheet):
-    """Citește link-urile, extrage prețurile și actualizează foaia."""
+    """Citește link-urile, extrage prețurile și actualizează foaia."""
     if sheet is None:
         print("Oprire. Foaia de lucru nu a putut fi inițializată.")
         return
