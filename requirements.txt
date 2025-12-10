@@ -3,3 +3,4 @@ beautifulsoup4
 gspread
 oauth2client
 requests-html
+lxml_html_clean
