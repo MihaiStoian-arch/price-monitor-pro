@@ -106,16 +106,15 @@ def send_alert_email(subject, body):
     
 def send_price_alerts(sheet):
     """
-    Citește coloanele de diferență (Q-V) și trimite o notificare
+    Citește coloanele de diferență (Q-V) și trimite o notificare 
     dacă găsește diferențe negative (concurentul are preț mai mic).
-    Această funcție se bazează pe faptul că prețul ATVROM (I) și prețurile competitorilor (J-O)
-    sunt deja actualizate.
     """
     if sheet is None:
         return
 
     try:
         # Citim datele de la Rândul 2 în jos.
+        # all_data va fi o listă de liste, unde fiecare sub-listă este un rând.
         all_data = sheet.get_all_values()[1:] 
         
     except Exception as e:
@@ -127,20 +126,18 @@ def send_price_alerts(sheet):
     # Numele site-urilor corespunzător Coloanelor de Diferență (Q la V)
     COMPETITOR_NAMES = ["Evo-Moto", "Moto4all", "Motoboom", "Motomus", "Moto24", "JetskiAdrenalin"]
     
-    # Prețul ATVROM (din Apps Script/VLOOKUP) se află pe indexul 8 (Coloana I)
-    YOUR_PRICE_COL_INDEX = 8         
+    YOUR_PRICE_INDEX = 8         # Index I
     FIRST_DIFFERENCE_INDEX = 16  # Index Q (Coloana Q este la indexul 16)
     
     for row_data in all_data:
-        # Ne asigurăm că există date
+        # Ne asigurăm că există date și că numele produsului nu este gol
         if not row_data or len(row_data) < (FIRST_DIFFERENCE_INDEX + len(COMPETITOR_NAMES)):
             continue
             
         product_name = row_data[0]
-        # Prețul ATVROM (scris în coloana I)
-        your_price_str = row_data[YOUR_PRICE_COL_INDEX] 
+        your_price_str = row_data[YOUR_PRICE_INDEX]
         
-        competitor_alerts = [] 
+        competitor_alerts = [] # Alerte specifice pentru acest produs
         
         # Iterăm prin cele 6 coloane de diferență (Q la V)
         for i in range(len(COMPETITOR_NAMES)):
@@ -152,21 +149,13 @@ def send_price_alerts(sheet):
                 diff_value_str = row_data[difference_index]
                 
                 if diff_value_str and diff_value_str.strip() != "":
-                    # Convertim valoarea din Sheets (ex: 1.234,56) la float Python (ex: 1234.56)
-                    # Presupunem că formula Sheets returnează numărul formatat (ex: 1.234,56)
-                    # Aici, presupunem că Sheets returnează valorile numerice (din formula IF)
-                    # folosind separatorul zecimal local (virgulă pentru RON)
-                    
-                    # Încercăm o conversie simplă (care funcționează dacă Sheets returnează doar zecimale cu punct)
-                    # Dacă Sheets returnează "1,234.00" sau "-1.23", se bazează pe setările regionale.
-                    # Rămânem la logica care funcționează pentru separatori:
+                    # Sheets returnează numerele formatate regional, Python are nevoie de '.' ca separator
                     difference = float(diff_value_str.replace(",", ".")) 
                     
                     # Dacă am citit o valoare, ea este negativă (datorită formulei IF din Sheets)
-                    # care apare doar dacă prețul competitorului (J,K,L,M,N,O) este mai mic decât I.
                     competitor_alerts.append({
                         'name': competitor_name,
-                        # Luăm valoarea absolută (diferența pozitivă)
+                        # Luăm valoarea absolută (diferența pozitivă) pentru a o afișa ca "economie"
                         'difference': abs(difference) 
                     })
                         
@@ -201,14 +190,14 @@ def send_price_alerts(sheet):
                     email_body += f"<tr>"
                     
                 email_body += f"<td>{alert['name']}</td>"
-                # Afișăm diferența în format monetar, pozitiv, evidențiind economia pe care o face concurentul
-                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f} RON mai mic</td>" 
+                # Afișăm diferența în format monetar, negativ, pentru a evidenția pierderea
+                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f}</td>" 
                 email_body += f"</tr>"
 
         email_body += "</table>"
         email_body += "<br>Vă rugăm să revizuiți strategia de preț."
         
-        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse Can-Am cu Preț Mai Mic la Concurență"
+        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse cu Preț Mai Mic la Concurență"
         
         send_alert_email(subject, email_body) 
 
