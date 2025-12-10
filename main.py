@@ -202,7 +202,7 @@ def send_price_alerts(sheet):
                     
                 email_body += f"<td>{alert['name']}</td>"
                 # Afișăm diferența în format monetar, pozitiv, evidențiind economia pe care o face concurentul
-                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f}</td>" 
+                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f} RON mai mic</td>" 
                 email_body += f"</tr>"
 
         email_body += "</table>"
