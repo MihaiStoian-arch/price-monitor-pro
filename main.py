@@ -25,7 +25,7 @@ from monitor.sites.moto24 import scrape_moto24
 from monitor.sites.jetskiadrenalin import get_jetskiadrenalin_price
 
 # ----------------------------------------------------
-## 1\. ⚙️ Configurare Globală și Harta de Coordonate
+## 1. ⚙️ Configurare Globală și Harta de Coordonate
 
 # --- Foaia de Calcul ---
 SPREADSHEET_NAME = 'Price Monitor ATVRom'
@@ -48,14 +48,17 @@ SCRAPER_COORDS = {
 TIMESTAMP_COL_INDEX = 16
 
 def get_public_ip():
-    # Funcția menținută pentru diagnosticare în log-uri
-    response = requests.get('https://ifconfig.me/ip', timeout=5)
-    if response.status_code == 200:
-        return response.text.strip()
-    return "N/A (Eroare de raspuns)"
+    """Funcția menținută pentru diagnosticare în log-uri."""
+    try:
+        response = requests.get('https://ifconfig.me/ip', timeout=5)
+        if response.status_code == 200:
+            return response.text.strip()
+        return "N/A (Eroare de raspuns)"
+    except requests.exceptions.RequestException:
+        return "N/A (Eroare de retea)"
 
 # ----------------------------------------------------
-## 2\. 🔑 Funcțiile de Conexiune și Alertă
+## 2. 🔑 Funcțiile de Conexiune și Alertă
 
 def setup_sheets_client():
     """Inițializează clientul gspread și returnează foaia de lucru."""
@@ -148,7 +151,8 @@ def send_price_alerts(sheet):
                 diff_value_str = row_data[difference_index]
                 
                 if diff_value_str and diff_value_str.strip() != "":
-                    # Sheets returnează numerele formatate regional, Python are nevoie de '.' ca separator
+                    # Sheets returnează numerele formatate regional. Python are nevoie de '.' ca separator
+                    # Aici preluăm valorile, inclusiv erorile precum #VALUE! sau N/A care vor duce la ValueError
                     difference = float(diff_value_str.replace(",", ".")) 
                     
                     # LOGICA CORECTĂ: Alerta se declanșează DOAR dacă valoarea este negativă.
@@ -160,7 +164,7 @@ def send_price_alerts(sheet):
                         })
                         
             except (ValueError, IndexError, TypeError):
-                # Ignoră celulele care nu sunt numere valide, inclusiv erorile generate de Sheets (N/A, #VALUE!)
+                # Ignoră celulele care nu sunt numere valide (ex: #VALUE!, N/A, string gol)
                 continue
 
         if competitor_alerts:
@@ -191,7 +195,7 @@ def send_price_alerts(sheet):
                     email_body += f"<tr>"
                     
                 email_body += f"<td>{alert['name']}</td>"
-                # Afișăm valoarea absolută (diferența pozitivă)
+                # MODIFICARE: Rotunjire la întreg (:.0f) și adăugarea textului "RON mai mic"
                 email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.0f} RON mai mic</td>" 
                 email_body += f"</tr>"
 
@@ -206,7 +210,7 @@ def send_price_alerts(sheet):
         print("\n✅ Nu s-au găsit produse cu prețuri mai mici la concurență.")
 
 # ----------------------------------------------------
-## 3\. 🔄 Funcția de Monitorizare și Actualizare (Doar Competitori)
+## 3. 🔄 Funcția de Monitorizare și Actualizare (Doar Competitori)
 
 def monitor_and_update_sheet(sheet):
     """Citește link-urile competitorilor (C-H), extrage prețurile și actualizează coloanele J-O."""
@@ -219,13 +223,11 @@ def monitor_and_update_sheet(sheet):
     # Citim toate datele de la rândul 2 în jos (excludem antetul)
     try:
         all_data = sheet.get_all_values()[1:]
-        sheet.batch_update(updates, value_input_option='USER_ENTERED') # 👈 AR TREBUI SĂ FORȚEZE REZOLVAREA FORMATĂRII REGIONALE
-        print("🎉 Toate prețurile și timestamp-ul au fost actualizate cu succes!")
     except Exception as e:
         print(f"❌ Eroare la citirea datelor din foaie: {e}")
         return
 
-    updates = []
+    updates = [] # Initializare corectă
     timestamp_val = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     print(f"\n--- 2. Începe procesarea a {len(all_data)} produse ---")
@@ -257,7 +259,7 @@ def monitor_and_update_sheet(sheet):
                     price = extractor_func(url)
                     
                     if price is not None:
-                        # Formatează prețul la 2 zecimale
+                        # Formatează prețul la 2 zecimale (ex: "72908.55")
                         price_str = f"{price:.2f}"
                         print(f"      ✅ Succes: {price_str} RON. Scris la {cell_range}")
                     else:
@@ -308,8 +310,8 @@ def monitor_and_update_sheet(sheet):
         print(f"\n⚡ Se scriu {len(updates)} actualizări și timestamp-ul ({timestamp_val}) în foaie...")
         
         try:
-            # Atenție: Acum actualizăm doar coloanele J-O și P.
-            sheet.batch_update(updates)
+            # ADĂUGAREA CRITICĂ AICI: USER_ENTERED
+            sheet.batch_update(updates, value_input_option='USER_ENTERED')
             print("🎉 Toate prețurile competitorilor și timestamp-ul au fost actualizate cu succes!")
         except Exception as e:
             print(f"❌ EROARE la scrierea în foaia de calcul: {e}")
@@ -318,7 +320,7 @@ def monitor_and_update_sheet(sheet):
 
 
 # ----------------------------------------------------
-## 4\. 🏁 Punctul de Intrare
+## 4. 🏁 Punctul de Intrare
 
 if __name__ == "__main__":
     # 1. Inițializează conexiunea
