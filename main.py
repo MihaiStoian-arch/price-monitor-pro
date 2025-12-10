@@ -109,7 +109,8 @@ def send_alert_email(subject, body):
 def send_price_alerts(sheet):
     """
     Citește coloanele de diferență (Q-V) și trimite o notificare
-    dacă găsește diferențe negative (concurentul are preț mai mic, conform formulei Sheets).
+    dacă găsește diferențe negative (concurentul are preț mai mic)
+    și dacă diferența absolută depășește pragul MINIMUM_DIFFERENCE_THRESHOLD.
     """
     if sheet is None:
         return
@@ -136,8 +137,7 @@ def send_price_alerts(sheet):
             continue
             
         product_name = row_data[0]
-        # Prețul ATVROM (din I), folosit doar în email
-        your_price_str = row_data[YOUR_PRICE_INDEX] 
+        your_price_str = row_data[YOUR_PRICE_INDEX]
         
         competitor_alerts = [] 
         
@@ -147,24 +147,22 @@ def send_price_alerts(sheet):
             competitor_name = COMPETITOR_NAMES[i]
             
             try:
-                # Citim valoarea (va fi un string gol "" sau o valoare numerică negativă)
+                # Citim valoarea (va fi un string gol "" sau un număr negativ)
                 diff_value_str = row_data[difference_index]
                 
                 if diff_value_str and diff_value_str.strip() != "":
-                    # Sheets returnează numerele formatate regional. Python are nevoie de '.' ca separator
-                    # Aici preluăm valorile, inclusiv erorile precum #VALUE! sau N/A care vor duce la ValueError
+                    # Sheets returnează numerele formatate regional (cu virgulă), Python are nevoie de '.'
                     difference = float(diff_value_str.replace(",", ".")) 
                     
-                    # LOGICA CORECTĂ: Alerta se declanșează DOAR dacă valoarea este negativă.
-                    if difference < 0:
+                    # CORECȚIA: Verificăm dacă diferența este negativă ȘI depășește pragul minim
+                    if difference < 0 and abs(difference) >= MINIMUM_DIFFERENCE_THRESHOLD:
                         competitor_alerts.append({
                             'name': competitor_name,
-                            # Stocăm valoarea absolută (diferența pozitivă) pentru afișarea în email
+                            # Stocăm valoarea absolută (diferența pozitivă)
                             'difference': abs(difference) 
                         })
                         
             except (ValueError, IndexError, TypeError):
-                # Ignoră celulele care nu sunt numere valide (ex: #VALUE!, N/A, string gol)
                 continue
 
         if competitor_alerts:
@@ -195,7 +193,7 @@ def send_price_alerts(sheet):
                     email_body += f"<tr>"
                     
                 email_body += f"<td>{alert['name']}</td>"
-                # MODIFICARE: Rotunjire la întreg (:.0f) și adăugarea textului "RON mai mic"
+                # Rotunjirea la întreg (:.0f) este menținută, dar acum este garantat > 0
                 email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.0f} RON mai mic</td>" 
                 email_body += f"</tr>"
 
