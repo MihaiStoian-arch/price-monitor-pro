@@ -16,6 +16,10 @@ SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 # ------------------------------------------------------------
 
+# Pragul minim de diferență (în RON) sub care nu se trimite alertă
+# CORECȚIA CRITICĂ: Definit la nivel global pentru a evita NameError
+MINIMUM_DIFFERENCE_THRESHOLD = 1.0 
+
 # ⚠️ Asigură-te că funcțiile de scraping sunt importate corect din directorul monitor/sites
 from monitor.sites.evo_moto import scrape_evomoto
 from monitor.sites.moto4all import scrape_moto4all_prices
@@ -36,12 +40,12 @@ CREDENTIALS_FILE = 'service_account_credentials.json'
 # Coloana A = 1, I = 9, P = 16
 # Scriptul se ocupă doar de competitori (C-H -> J-O).
 SCRAPER_COORDS = {
-    3: [10, scrape_evomoto],                # C -> J (Evo-Moto)
-    4: [11, scrape_moto4all_prices],        # D -> K (Moto4all)
-    5: [12, scrape_motoboom_prices],        # E -> L (Motoboom)
-    6: [13, get_motomus_price],             # F -> M (Motomus)
-    7: [14, scrape_moto24],                 # G -> N (Moto24)
-    8: [15, get_jetskiadrenalin_price],     # H -> O (JetskiAdrenalin)
+    3: [10, scrape_evomoto],            # C -> J (Evo-Moto)
+    4: [11, scrape_moto4all_prices],    # D -> K (Moto4all)
+    5: [12, scrape_motoboom_prices],    # E -> L (Motoboom)
+    6: [13, get_motomus_price],         # F -> M (Motomus)
+    7: [14, scrape_moto24],             # G -> N (Moto24)
+    8: [15, get_jetskiadrenalin_price], # H -> O (JetskiAdrenalin)
 }
 
 # Coloana pentru Timestamp-ul general (Coloana P)
@@ -137,7 +141,8 @@ def send_price_alerts(sheet):
             continue
             
         product_name = row_data[0]
-        your_price_str = row_data[YOUR_PRICE_INDEX]
+        # Prețul ATVROM (din I), folosit doar în email
+        your_price_str = row_data[YOUR_PRICE_INDEX] 
         
         competitor_alerts = [] 
         
@@ -147,22 +152,23 @@ def send_price_alerts(sheet):
             competitor_name = COMPETITOR_NAMES[i]
             
             try:
-                # Citim valoarea (va fi un string gol "" sau un număr negativ)
+                # Citim valoarea (va fi un string gol "" sau o valoare numerică negativă)
                 diff_value_str = row_data[difference_index]
                 
                 if diff_value_str and diff_value_str.strip() != "":
-                    # Sheets returnează numerele formatate regional (cu virgulă), Python are nevoie de '.'
+                    # Sheets returnează numerele formatate regional. Python are nevoie de '.' ca separator
                     difference = float(diff_value_str.replace(",", ".")) 
                     
-                    # CORECȚIA: Verificăm dacă diferența este negativă ȘI depășește pragul minim
+                    # LOGICA CORECTATĂ: Alerta se declanșează DOAR dacă valoarea este negativă ȘI depășește pragul MINIMUM_DIFFERENCE_THRESHOLD.
                     if difference < 0 and abs(difference) >= MINIMUM_DIFFERENCE_THRESHOLD:
                         competitor_alerts.append({
                             'name': competitor_name,
-                            # Stocăm valoarea absolută (diferența pozitivă)
+                            # Stocăm valoarea absolută (diferența pozitivă) pentru afișarea în email
                             'difference': abs(difference) 
                         })
                         
             except (ValueError, IndexError, TypeError):
+                # Ignoră celulele care nu sunt numere valide (ex: #VALUE!, N/A, string gol)
                 continue
 
         if competitor_alerts:
@@ -193,7 +199,7 @@ def send_price_alerts(sheet):
                     email_body += f"<tr>"
                     
                 email_body += f"<td>{alert['name']}</td>"
-                # Rotunjirea la întreg (:.0f) este menținută, dar acum este garantat > 0
+                # Rotunjirea la întreg (:.0f) este menținută
                 email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.0f} RON mai mic</td>" 
                 email_body += f"</tr>"
 
@@ -308,7 +314,7 @@ def monitor_and_update_sheet(sheet):
         print(f"\n⚡ Se scriu {len(updates)} actualizări și timestamp-ul ({timestamp_val}) în foaie...")
         
         try:
-            # ADĂUGAREA CRITICĂ AICI: USER_ENTERED
+            # ADĂUGAREA CRITICĂ AICI: USER_ENTERED (păstrată din codul original al dvs.)
             sheet.batch_update(updates, value_input_option='USER_ENTERED')
             print("🎉 Toate prețurile competitorilor și timestamp-ul au fost actualizate cu succes!")
         except Exception as e:
