@@ -16,8 +16,7 @@ SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 # ------------------------------------------------------------
 
-# ⚠️ Aceste funcții sunt necesare DOAR pentru competitori.
-# Funcțiile pentru ATVROM (get_atvrom_price_map, process_atvrom_link) au fost eliminate.
+# ⚠️ Asigură-te că funcțiile de scraping sunt importate corect din directorul monitor/sites
 from monitor.sites.evo_moto import scrape_evomoto
 from monitor.sites.moto4all import scrape_moto4all_prices
 from monitor.sites.motoboom import scrape_motoboom_prices
@@ -34,8 +33,8 @@ WORKSHEET_NAME = 'Can-Am'
 CREDENTIALS_FILE = 'service_account_credentials.json'
 
 # Harta: { Index Coloană Sursă (Link): [Index Coloană Destinație (Preț), Funcție Scraper] }
-# Am ELIMINAT logica ATVROM (B -> I). Scriptul se ocupă acum doar de competitori (C-H -> J-O).
-# Coloana A = Index 1, B = 2, I = 9, O = 15, P = 16
+# Coloana A = 1, I = 9, P = 16
+# Scriptul se ocupă doar de competitori (C-H -> J-O).
 SCRAPER_COORDS = {
     3: [10, scrape_evomoto],                # C -> J (Evo-Moto)
     4: [11, scrape_moto4all_prices],        # D -> K (Moto4all)
@@ -56,7 +55,7 @@ def get_public_ip():
     return "N/A (Eroare de raspuns)"
 
 # ----------------------------------------------------
-## 2\. 🔑 Funcțiile de Conexiune și Alertă (Neschimbate)
+## 2\. 🔑 Funcțiile de Conexiune și Alertă
 
 def setup_sheets_client():
     """Inițializează clientul gspread și returnează foaia de lucru."""
@@ -89,7 +88,7 @@ def send_alert_email(subject, body):
         msg['From'] = SENDER_EMAIL
         msg['To'] = RECEIVER_EMAIL
         msg['Subject'] = subject
-        # Folosim HTML pentru a formata tabelul de alerte
+        # Folosim HTML
         msg.attach(MIMEText(body, 'html')) 
 
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
@@ -106,15 +105,14 @@ def send_alert_email(subject, body):
     
 def send_price_alerts(sheet):
     """
-    Citește coloanele de diferență (Q-V) și trimite o notificare 
-    dacă găsește diferențe negative (concurentul are preț mai mic).
+    Citește coloanele de diferență (Q-V) și trimite o notificare
+    dacă găsește diferențe negative (concurentul are preț mai mic, conform formulei Sheets).
     """
     if sheet is None:
         return
 
     try:
         # Citim datele de la Rândul 2 în jos.
-        # all_data va fi o listă de liste, unde fiecare sub-listă este un rând.
         all_data = sheet.get_all_values()[1:] 
         
     except Exception as e:
@@ -135,9 +133,10 @@ def send_price_alerts(sheet):
             continue
             
         product_name = row_data[0]
-        your_price_str = row_data[YOUR_PRICE_INDEX]
+        # Prețul ATVROM (din I), folosit doar în email
+        your_price_str = row_data[YOUR_PRICE_INDEX] 
         
-        competitor_alerts = [] # Alerte specifice pentru acest produs
+        competitor_alerts = [] 
         
         # Iterăm prin cele 6 coloane de diferență (Q la V)
         for i in range(len(COMPETITOR_NAMES)):
@@ -145,21 +144,23 @@ def send_price_alerts(sheet):
             competitor_name = COMPETITOR_NAMES[i]
             
             try:
-                # Citim valoarea (va fi un string gol "" sau un număr negativ)
+                # Citim valoarea (va fi un string gol "" sau o valoare numerică negativă)
                 diff_value_str = row_data[difference_index]
                 
                 if diff_value_str and diff_value_str.strip() != "":
                     # Sheets returnează numerele formatate regional, Python are nevoie de '.' ca separator
                     difference = float(diff_value_str.replace(",", ".")) 
                     
-                    # Dacă am citit o valoare, ea este negativă (datorită formulei IF din Sheets)
-                    competitor_alerts.append({
-                        'name': competitor_name,
-                        # Luăm valoarea absolută (diferența pozitivă) pentru a o afișa ca "economie"
-                        'difference': abs(difference) 
-                    })
+                    # LOGICA CORECTĂ: Alerta se declanșează DOAR dacă valoarea este negativă.
+                    if difference < 0:
+                        competitor_alerts.append({
+                            'name': competitor_name,
+                            # Stocăm valoarea absolută (diferența pozitivă) pentru afișarea în email
+                            'difference': abs(difference) 
+                        })
                         
             except (ValueError, IndexError, TypeError):
+                # Ignoră celulele care nu sunt numere valide, inclusiv erorile generate de Sheets (N/A, #VALUE!)
                 continue
 
         if competitor_alerts:
@@ -190,14 +191,14 @@ def send_price_alerts(sheet):
                     email_body += f"<tr>"
                     
                 email_body += f"<td>{alert['name']}</td>"
-                # Afișăm diferența în format monetar, negativ, pentru a evidenția pierderea
-                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f}</td>" 
+                # Afișăm valoarea absolută (diferența pozitivă)
+                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f} RON mai mic</td>" 
                 email_body += f"</tr>"
 
         email_body += "</table>"
         email_body += "<br>Vă rugăm să revizuiți strategia de preț."
         
-        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse cu Preț Mai Mic la Concurență"
+        subject = f"🚨 [ALERTĂ PREȚ] {len(alert_products)} Produse Can-Am cu Preț Mai Mic la Concurență"
         
         send_alert_email(subject, email_body) 
 
@@ -208,12 +209,12 @@ def send_price_alerts(sheet):
 ## 3\. 🔄 Funcția de Monitorizare și Actualizare (Doar Competitori)
 
 def monitor_and_update_sheet(sheet):
-    """Citește link-urile competitorilor, extrage prețurile și actualizează coloanele J-O."""
+    """Citește link-urile competitorilor (C-H), extrage prețurile și actualizează coloanele J-O."""
     if sheet is None:
         print("Oprire. Foaia de lucru nu a putut fi inițializată.")
         return
 
-    print(f"\n--- 1. Prețul ATVROM (Coloana I) este preluat de Apps Script/Formule. Scriptul se ocupă doar de competitori. ---")
+    print(f"\n--- 1. Scriptul actualizează doar prețurile competitorilor (J-O) și timestamp-ul (P). ---")
 
     # Citim toate datele de la rândul 2 în jos (excludem antetul)
     try:
@@ -326,5 +327,4 @@ if __name__ == "__main__":
         monitor_and_update_sheet(sheet_client)
         
         # 3. Odată ce foaia este actualizată, rulează logica de alertare
-        # care citește din foaie (I, Q-V)
         send_price_alerts(sheet_client)
