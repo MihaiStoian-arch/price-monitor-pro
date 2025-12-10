@@ -30,21 +30,21 @@ def clean_and_convert_price(price_text: str) -> Optional[int]:
         return None
 
 def scrape_moto24(product_url: str) -> Optional[int]:
-    """
-    Descarcă pagina, extrage prețul în RON și returnează valoarea numerică.
-    """
-    print(f"Încerc să extrag prețul de la: {product_url}")
-    
-    headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'DNT': '1', # Do Not Track (opțional, dar adesea inclus)
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-    # 'Referer': 'https://www.google.com/', # Puteți adăuga un Referer dacă este necesar
-}
+    """
+    Descarcă pagina, extrage prețul în RON și returnează valoarea numerică.
+    """
+    print(f"Încerc să extrag prețul de la: {product_url}")
+    
+    # NOU: Referer activat și set de headere curățat
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Referer': 'https://www.google.com/', # ACUM ACTIV!
+    }
     
     try:
         # Aici folosește 'requests.get'
