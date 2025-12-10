@@ -1,40 +1,38 @@
-from requests_html import HTMLSession # NOU: Necesită requests-html și lxml_html_clean
+from requests_html import HTMLSession
 from typing import Optional, Union
 import re 
 
-# Definește selectorul stabil (primul test)
-# Pe baza analizei, ".product-price" eșuează. Încercăm un selector mai specific, sau generic.
-PRICE_SELECTOR = "span.price" 
+PRICE_SELECTOR = ".product-price" # Selectorul actualizat pentru moto24, bazat pe log-uri.
 
-def clean_and_convert_price(price_text: str) -> Optional[int]:
-    """
-    Curăță textul prețului (e.g., "23.824 Lei (TVA Inclus)") și îl convertește în RON întreg (int).
-    """
+def clean_and_convert_price(price_text: str) -> Optional[float]:
+    """Curăță textul prețului (e.g., "23.824 Lei") și îl convertește în float."""
     if not price_text:
         return None
+    # Elimină orice non-cifră în afară de punct și virgulă
+    cleaned_text = re.sub(r'[^\d\.,]', '', price_text) 
+    
+    # 1. Înlocuim punctul (separator de mii) cu nimic. 
+    # 2. Înlocuim virgula (separator zecimal) cu punct. 
+    # (Acest lucru este valabil pentru formatul românesc standard: "12.345,67" -> "12345.67")
+    
+    # Verificăm dacă există virgulă pentru a ști unde este zecimala
+    if ',' in cleaned_text:
+        # Separator de mii punct, separator zecimal virgulă
+        final_numeric_string = cleaned_text.replace('.', '').replace(',', '.')
+    else:
+        # Presupunem că dacă nu există virgulă, tot textul este număr întreg (sau separatorul este punct)
+        final_numeric_string = cleaned_text.replace('.', '')
         
-    # 1. Elimină textul irelevant (Lei, TVA Inclus, etc.)
-    cleaned_text = re.sub(r'[^0-9\.]', '', price_text) 
-    
-    # 2. Elimină separatorul de mii (punctul).
-    final_numeric_string = cleaned_text.replace('.', '')
-    
     try:
-        # 3. Convertește în număr întreg (RON)
-        price_ron = int(final_numeric_string)
-        return price_ron
+        price_float = float(final_numeric_string)
+        return price_float
     except ValueError:
         return None
 
-def scrape_moto24(product_url: str) -> Optional[int]:
-    """
-    Descarcă pagina folosind rendering JavaScript pentru a trece de protecțiile anti-bot.
-    """
-    print(f"    - Scrapează dealer.moto24.ro...")
-    print(f"    - Încerc să extrag prețul de la: {product_url}")
+def scrape_moto24(product_url: str) -> Optional[float]:
+    """Descarcă pagina folosind rendering JavaScript pentru a trece de protecțiile anti-bot (403)."""
     
     session = HTMLSession() 
-    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://www.google.com/',
@@ -43,54 +41,54 @@ def scrape_moto24(product_url: str) -> Optional[int]:
     }
     
     try:
-        response = session.get(product_url, headers=headers, timeout=20)
+        response = session.get(product_url, headers=headers, timeout=25)
         
-        # PAS CRITIC: Rulare JavaScript pentru a rezolva Cloudflare
-        print("    - Încearcă rendering JavaScript (poate dura 5-10 secunde)...")
-        response.html.render(sleep=2, timeout=10) 
+        # PAS CRITIC: Rulare JavaScript (pentru 403)
+        print("      - Încearcă rendering JavaScript (poate dura 5-10 secunde)...")
+        # Folosim waitUntil='domcontentloaded' pentru a fi mai rapid decât 'networkidle'
+        response.html.render(sleep=3, timeout=15, reload=False) 
 
-        price_text = ""
-        
-        # 1. Încercăm selectorul specific
+        # 1. Încercăm selectorul specific (.product-price)
         price_element = response.html.find(PRICE_SELECTOR, first=True)
 
+        price_text = None
         if price_element:
             price_text = price_element.text
+            print(f"      - Text preț găsit via selector: '{price_text}'")
         else:
-            # 2. Fallback: Căutăm în tot corpul paginii (mai lent, dar robust)
-            body_element = response.html.find('body', first=True)
-            if body_element:
-                price_text = body_element.text
-
-        final_price = None
-        if price_text:
-            # Căutăm în textul extras un format de preț care include puncte de separare de mii
-            # Expresia regulată caută un număr formatat care se termină cu "Lei"
-            price_match = re.search(r'([0-9\.]+)\s*Lei', price_text, re.IGNORECASE)
+            print(f"      ❌ EROARE: Elementul de preț cu selectorul '{PRICE_SELECTOR}' nu a fost găsit după rendering.")
+            
+            # 2. Fallback: Căutăm în tot textul paginii (după ce a fost randată)
+            body_text = response.html.full_text
+            price_match = re.search(r'([0-9\.\,]+)\s*Lei', body_text, re.IGNORECASE)
             
             if price_match:
-                price_value = price_match.group(1) 
-                final_price = clean_and_convert_price(price_value)
-                
-                if final_price:
-                    print(f"      ✅ Succes. Preț extras din text: {final_price} RON")
-                    return final_price
+                price_text = price_match.group(1)
+                print(f"      - Text preț găsit via regex: '{price_text}'")
+            else:
+                print(f"      ❌ EROARE: Niciun preț găsit folosind regex.")
+                return None
         
-        print(f"      ❌ EROARE: Elementul de preț nu a fost găsit sau procesat corect.")
-        return None
+        final_price = clean_and_convert_price(price_text)
+        
+        if final_price:
+            return final_price
+        else:
+            print(f"      ❌ EROARE: Prețul '{price_text}' nu a putut fi convertit în număr.")
+            return None
             
     except Exception as e:
-        print(f"      ❌ EROARE la request/rendering către {product_url}: {e}")
+        print(f"      ❌ EXCEPȚIE la request/rendering către dealer.moto24.ro: {e}")
         return None
     finally:
         session.close() 
 
 if __name__ == '__main__':
-    # Exemplu de URL de test
-    test_url = "https://dealer.moto24.ro/aprilia-sr-gt-125-abs-2024/"
+    # Exemplu de URL de test (Outlander 700)
+    test_url = "https://dealer.moto24.ro/atv-can-am-outlander-max-xt-700-t-abs-2025/"
     pret_extras = scrape_moto24(test_url)
     
     if pret_extras is not None:
-        print(f"\nRezultat final: {pret_extras} RON")
+        print(f"\nRezultat final: {pret_extras:.2f} RON")
     else:
         print("\nExtragerea prețului a eșuat.")
