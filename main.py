@@ -218,10 +218,11 @@ def monitor_and_update_sheet(sheet):
 
     # Citim toate datele de la rândul 2 în jos (excludem antetul)
     try:
-        sheet.batch_update(updates, value_input_option='USER_ENTERED') # 👈 MODIFICARE AICI
+        all_data = sheet.get_all_values()[1:]
+        sheet.batch_update(updates, value_input_option='USER_ENTERED') # 👈 AR TREBUI SĂ FORȚEZE REZOLVAREA FORMATĂRII REGIONALE
         print("🎉 Toate prețurile și timestamp-ul au fost actualizate cu succes!")
     except Exception as e:
-        print(f"❌ EROARE la scrierea în foaia de calcul: {e}")
+        print(f"❌ Eroare la citirea datelor din foaie: {e}")
         return
 
     updates = []
