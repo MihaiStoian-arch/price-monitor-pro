@@ -42,28 +42,43 @@ def scrape_moto24(product_url: str) -> Optional[int]:
     }
     
     try:
-        # Pasul 1: Obținerea paginii
-        response = session.get(product_url, headers=headers, timeout=20)
+        # ... (Pasul 1: session.get și response.html.render() ca mai sus) ...
         
-        # ⚠️ PAS CRITIC: Rulare JavaScript pentru a rezolva Cloudflare (timeout 10 secunde)
-        print("    - Încearcă rendering JavaScript (poate dura 5-10 secunde)...")
-        # sleep=2 așteaptă 2 secunde după încărcarea inițială, asigurând că scripturile se execută.
-        response.html.render(sleep=2, timeout=10) 
-
-        # Pasul 2: Extragerea prețului după rendering (folosind sintaxa requests-html)
+        # Nou: Extrage tot textul din corp sau din elementul principal de produs
+        # Vom încerca mai întâi selectorul specific, apoi tot body-ul
         price_element = response.html.find(PRICE_SELECTOR, first=True)
 
         if price_element:
-            # Extrage textul (acum este cel final, generat de JS)
             price_text = price_element.text
-            final_price = clean_and_convert_price(price_text)
-            
-            # print(f"      Preț text original extras după rendering: '{price_text}'")
-            print(f"      ✅ Succes. Preț extras: {final_price} RON")
-            return final_price
         else:
-            print(f"      ❌ EROARE: Elementul de preț cu selectorul '{PRICE_SELECTOR}' nu a fost găsit după rendering.")
+            # Fallback: Găsim tot body-ul și căutăm prețul în text
+            print("      ❌ Selectorul nu a funcționat. Folosesc textul din body.")
+            body_element = response.html.find('body', first=True)
+            if body_element:
+                price_text = body_element.text
+            else:
+                price_text = ""
+        
+        if price_text:
+            # Folosim expresia regulată pentru a găsi formatul de preț (ex: 78.911 Lei)
+            # Acesta va fi curățat oricum de clean_and_convert_price
+            price_match = re.search(r'([0-9\.]+)\s*Lei', price_text)
+            
+            if price_match:
+                price_value = price_match.group(1) # Ex: "78.911"
+                final_price = clean_and_convert_price(price_value)
+                
+                print(f"      ✅ Succes. Preț extras din text: {final_price} RON")
+                return final_price
+            else:
+                print("      ❌ EROARE: Nu s-a putut găsi prețul în textul paginii (format RON).")
+                return None
+        else:
+            print("      ❌ EROARE: Nu s-a putut extrage text relevant din pagină.")
             return None
+            
+    except Exception as e:
+        # ... (restul logicii de tratare a excepțiilor) ...
             
     except Exception as e:
         print(f"      ❌ EROARE la request/rendering către {product_url}: {e}")
