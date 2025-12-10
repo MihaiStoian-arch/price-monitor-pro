@@ -1,4 +1,4 @@
-import requests # <--- ESEȚIAL: Am adăugat importul 'requests' aici!
+import requests 
 from bs4 import BeautifulSoup 
 import re 
 from typing import Optional, Union
@@ -26,62 +26,56 @@ def clean_and_convert_price(price_text: str) -> Optional[int]:
         price_ron = int(final_numeric_string)
         return price_ron
     except ValueError:
-        print(f"Eroare la conversia prețului '{final_numeric_string}' în număr întreg.")
+        # print(f"Eroare la conversia prețului '{final_numeric_string}' în număr întreg.")
         return None
 
 def scrape_moto24(product_url: str) -> Optional[int]:
-    """
-    Descarcă pagina, extrage prețul în RON și returnează valoarea numerică.
-    """
-    print(f"Încerc să extrag prețul de la: {product_url}")
-    
-    # NOU: Referer activat și set de headere curățat
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Referer': 'https://www.google.com/', # ACUM ACTIV!
-    }
+    """
+    Descarcă pagina, extrage prețul în RON și returnează valoarea numerică.
+    """
+    print(f"Încerc să extrag prețul de la: {product_url}")
+    
+    # Set de headere actualizat
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Referer': 'https://www.google.com/', # Referer activat
+    }
     
     try:
-        # Aici folosește 'requests.get'
         response = requests.get(product_url, headers=headers, timeout=10)
         response.raise_for_status() # Ridică excepție pentru coduri HTTP de eroare (4xx sau 5xx)
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Găsește elementul de preț folosind selectorul '.product-price'
+        # Găsește elementul de preț
         price_element = soup.select_one(PRICE_SELECTOR)
         
         if price_element:
-            # Extrage tot textul din elementul părinte
             price_text = price_element.get_text(strip=True)
-            
-            # Curăță și convertește prețul
             final_price = clean_and_convert_price(price_text)
             
-            print(f"Preț text original extras din site: '{price_text}'")
-            print(f"Preț numeric curățat: {final_price} RON")
+            # print(f"Preț text original extras din site: '{price_text}'")
+            # print(f"Preț numeric curățat: {final_price} RON")
             return final_price
         else:
             print(f"Eroare: Elementul de preț cu selectorul '{PRICE_SELECTOR}' nu a fost găsit.")
             return None
-        
-    except requests.exceptions.RequestException as e: # Aici folosește 'requests.exceptions'
-        print(f"Eroare de rețea/request: {e}")
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Eroare de rețea/request: 403 Forbidden sau altă eroare: {e}")
         return None
     except Exception as e:
         print(f"A apărut o eroare neașteptată: {e}")
         return None
 
-# Exemplu de utilizare pentru testare:
 if __name__ == '__main__':
-    # URL-ul tău din imagine
+    # Exemplu de URL de test
     test_url = "https://dealer.moto24.ro/aprilia-sr-gt-125-abs-2024/"
-    
     pret_extras = scrape_moto24(test_url)
     
     if pret_extras is not None:
