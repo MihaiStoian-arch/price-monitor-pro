@@ -2,6 +2,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
+import requests
 # --- IMPORTURI PENTRU EMAIL ---
 import smtplib
 from email.mime.text import MIMEText
@@ -15,9 +16,11 @@ SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 # ------------------------------------------------------------
 
+# Pragul minim de diferență (în RON) sub care nu se trimite alertă
+# CORECȚIA CRITICĂ: Definit la nivel global pentru a evita NameError
+MINIMUM_DIFFERENCE_THRESHOLD = 1.0 
+
 # ⚠️ Asigură-te că funcțiile de scraping sunt importate corect din directorul monitor/sites
-# Acestea sunt doar exemple. Adaptează-le la denumirile funcțiilor tale reale.
-from monitor.sites.atvrom import scrape_atvrom
 from monitor.sites.evo_moto import scrape_evomoto
 from monitor.sites.moto4all import scrape_moto4all_prices
 from monitor.sites.motoboom import scrape_motoboom_prices
@@ -26,30 +29,40 @@ from monitor.sites.moto24 import scrape_moto24
 from monitor.sites.jetskiadrenalin import get_jetskiadrenalin_price
 
 # ----------------------------------------------------
-## 1\. ⚙️ Configurare Globală și Harta de Coordonate
+## 1. ⚙️ Configurare Globală și Harta de Coordonate
 
 # --- Foaia de Calcul ---
-SPREADSHEET_NAME = 'Price Monitor ATVRom'   
-WORKSHEET_NAME = 'Kawasaki'    
+SPREADSHEET_NAME = 'Price Monitor ATVRom'
+WORKSHEET_NAME = 'Kawasaki'
 CREDENTIALS_FILE = 'service_account_credentials.json'
 
 # Harta: { Index Coloană Sursă (Link): [Index Coloană Destinație (Preț), Funcție Scraper] }
-# Coloana A = Index 1, B = 2, I = 9, O = 15, P = 16
+# Coloana A = 1, I = 9, P = 16
+# Scriptul se ocupă doar de competitori (C-H -> J-O).
 SCRAPER_COORDS = {
-    2: [9, scrape_atvrom],                 # B -> I
-    3: [10, scrape_evomoto],               # C -> J
-    4: [11, scrape_moto4all_prices],       # D -> K
-    5: [12, scrape_motoboom_prices],       # E -> L
-    6: [13, get_motomus_price],            # F -> M
-    7: [14, scrape_moto24],                # G -> N
-    8: [15, get_jetskiadrenalin_price],    # H -> O
+    3: [10, scrape_evomoto],            # C -> J (Evo-Moto)
+    4: [11, scrape_moto4all_prices],    # D -> K (Moto4all)
+    5: [12, scrape_motoboom_prices],    # E -> L (Motoboom)
+    6: [13, get_motomus_price],         # F -> M (Motomus)
+    7: [14, scrape_moto24],             # G -> N (Moto24)
+    8: [15, get_jetskiadrenalin_price], # H -> O (JetskiAdrenalin)
 }
 
 # Coloana pentru Timestamp-ul general (Coloana P)
-TIMESTAMP_COL_INDEX = 16 
+TIMESTAMP_COL_INDEX = 16
+
+def get_public_ip():
+    """Funcția menținută pentru diagnosticare în log-uri."""
+    try:
+        response = requests.get('https://ifconfig.me/ip', timeout=5)
+        if response.status_code == 200:
+            return response.text.strip()
+        return "N/A (Eroare de raspuns)"
+    except requests.exceptions.RequestException:
+        return "N/A (Eroare de retea)"
 
 # ----------------------------------------------------
-## 2\. 🔑 Funcția de Conexiune
+## 2. 🔑 Funcțiile de Conexiune și Alertă
 
 def setup_sheets_client():
     """Inițializează clientul gspread și returnează foaia de lucru."""
@@ -61,10 +74,14 @@ def setup_sheets_client():
         client = gspread.authorize(creds)
         
         # Deschide foaia de calcul și foaia de lucru
-        spreadsheet = client.open(SPREADSHEET_NAME) 
-        sheet = spreadsheet.worksheet(WORKSHEET_NAME) 
+        spreadsheet = client.open(SPREADSHEET_NAME)
+        sheet = spreadsheet.worksheet(WORKSHEET_NAME)
         
         print(f"✅ Conexiune reușită la foaia de lucru '{WORKSHEET_NAME}'.")
+
+        current_ip = get_public_ip()
+        print(f"🌐 IP-ul public de ieșire al Runner-ului: **{current_ip}**")
+        
         return sheet
     except Exception as e:
         print(f"❌ Eroare la inițializarea Google Sheets client: {e}")
@@ -78,7 +95,7 @@ def send_alert_email(subject, body):
         msg['From'] = SENDER_EMAIL
         msg['To'] = RECEIVER_EMAIL
         msg['Subject'] = subject
-        # Folosim HTML pentru a formata tabelul de alerte
+        # Folosim HTML
         msg.attach(MIMEText(body, 'html')) 
 
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
@@ -95,15 +112,15 @@ def send_alert_email(subject, body):
     
 def send_price_alerts(sheet):
     """
-    Citește coloanele de diferență (Q-V) și trimite o notificare 
-    dacă găsește diferențe negative (concurentul are preț mai mic).
+    Citește coloanele de diferență (Q-V) și trimite o notificare
+    dacă găsește diferențe negative (concurentul are preț mai mic)
+    și dacă diferența absolută depășește pragul MINIMUM_DIFFERENCE_THRESHOLD.
     """
     if sheet is None:
         return
 
     try:
         # Citim datele de la Rândul 2 în jos.
-        # all_data va fi o listă de liste, unde fiecare sub-listă este un rând.
         all_data = sheet.get_all_values()[1:] 
         
     except Exception as e:
@@ -124,9 +141,10 @@ def send_price_alerts(sheet):
             continue
             
         product_name = row_data[0]
-        your_price_str = row_data[YOUR_PRICE_INDEX]
+        # Prețul ATVROM (din I), folosit doar în email
+        your_price_str = row_data[YOUR_PRICE_INDEX] 
         
-        competitor_alerts = [] # Alerte specifice pentru acest produs
+        competitor_alerts = [] 
         
         # Iterăm prin cele 6 coloane de diferență (Q la V)
         for i in range(len(COMPETITOR_NAMES)):
@@ -134,21 +152,23 @@ def send_price_alerts(sheet):
             competitor_name = COMPETITOR_NAMES[i]
             
             try:
-                # Citim valoarea (va fi un string gol "" sau un număr negativ)
+                # Citim valoarea (va fi un string gol "" sau o valoare numerică negativă)
                 diff_value_str = row_data[difference_index]
                 
                 if diff_value_str and diff_value_str.strip() != "":
-                    # Sheets returnează numerele formatate regional, Python are nevoie de '.' ca separator
+                    # Sheets returnează numerele formatate regional. Python are nevoie de '.' ca separator
                     difference = float(diff_value_str.replace(",", ".")) 
                     
-                    # Dacă am citit o valoare, ea este negativă (datorită formulei IF din Sheets)
-                    competitor_alerts.append({
-                        'name': competitor_name,
-                        # Luăm valoarea absolută (diferența pozitivă) pentru a o afișa ca "economie"
-                        'difference': abs(difference) 
-                    })
+                    # LOGICA CORECTATĂ: Alerta se declanșează DOAR dacă valoarea este negativă ȘI depășește pragul MINIMUM_DIFFERENCE_THRESHOLD.
+                    if difference < 0 and abs(difference) >= MINIMUM_DIFFERENCE_THRESHOLD:
+                        competitor_alerts.append({
+                            'name': competitor_name,
+                            # Stocăm valoarea absolută (diferența pozitivă) pentru afișarea în email
+                            'difference': abs(difference) 
+                        })
                         
             except (ValueError, IndexError, TypeError):
+                # Ignoră celulele care nu sunt numere valide (ex: #VALUE!, N/A, string gol)
                 continue
 
         if competitor_alerts:
@@ -179,8 +199,8 @@ def send_price_alerts(sheet):
                     email_body += f"<tr>"
                     
                 email_body += f"<td>{alert['name']}</td>"
-                # Afișăm diferența în format monetar, negativ, pentru a evidenția pierderea
-                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.2f}</td>" 
+                # Rotunjirea la întreg (:.0f) este menținută
+                email_body += f"<td style='color: red; font-weight: bold;'>{alert['difference']:.0f} RON mai mic</td>" 
                 email_body += f"</tr>"
 
         email_body += "</table>"
@@ -194,81 +214,86 @@ def send_price_alerts(sheet):
         print("\n✅ Nu s-au găsit produse cu prețuri mai mici la concurență.")
 
 # ----------------------------------------------------
-## 3\. 🔄 Funcția de Monitorizare și Actualizare (Logică Nouă)
+## 3. 🔄 Funcția de Monitorizare și Actualizare (Doar Competitori)
 
 def monitor_and_update_sheet(sheet):
-    """Citește link-urile, extrage prețurile și actualizează foaia."""
+    """Citește link-urile competitorilor (C-H), extrage prețurile și actualizează coloanele J-O."""
     if sheet is None:
         print("Oprire. Foaia de lucru nu a putut fi inițializată.")
         return
 
+    print(f"\n--- 1. Scriptul actualizează doar prețurile competitorilor (J-O) și timestamp-ul (P). ---")
+
     # Citim toate datele de la rândul 2 în jos (excludem antetul)
     try:
-        all_data = sheet.get_all_values()[1:] 
+        all_data = sheet.get_all_values()[1:]
     except Exception as e:
         print(f"❌ Eroare la citirea datelor din foaie: {e}")
         return
 
-    updates = []
+    updates = [] # Initializare corectă
     timestamp_val = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    print(f"\n--- Începe procesarea a {len(all_data)} produse ---")
+    print(f"\n--- 2. Începe procesarea a {len(all_data)} produse ---")
 
     # Parcurgem fiecare rând (produs)
-    # **AICI SE TRECE DE LA O LINIE LA ALTA**
     for row_index, row_data in enumerate(all_data):
-        # gsheet_row_num este numărul rândului în foaia de lucru (rândul 1 e antetul, deci începem de la 2)
         gsheet_row_num = row_index + 2 
-        
-        # Numele produsului din coloana A (Index 0 în lista row_data)
         product_name = row_data[0] 
 
         print(f"\n➡️ Procesează: {product_name} la rândul {gsheet_row_num}")
 
-        # Parcurgem harta de coordonate (B->I, C->J, etc.)
+        # Parcurgem harta de coordonate (doar competitori)
         for src_col_idx, (dest_col_idx, extractor_func) in SCRAPER_COORDS.items():
             
-            # Indexul coloanei de link în lista row_data (Indexul Python este cu 1 mai mic)
             link_index_in_list = src_col_idx - 1 
             
-            # Verificăm dacă link-ul există în datele citite și nu este gol
+            # Verificăm dacă există link în coloana sursă (C, D, E, F, G, sau H)
             if link_index_in_list < len(row_data) and row_data[link_index_in_list]:
                 url = row_data[link_index_in_list]
-                
-                # Nume scurt pentru log
                 scraper_name = url.split('/')[2] 
 
-                print(f"   - Scrapează {scraper_name}...")
+                dest_col_letter = gspread.utils.rowcol_to_a1(1, dest_col_idx).split('1')[0]
+                cell_range = f'{dest_col_letter}{gsheet_row_num}'
+                price = None
                 
+                # --- LOGICĂ PENTRU COMPETITORI - SE FACE SCRAPING ---
+                print(f"    - Scrapează {scraper_name}...")
                 try:
                     price = extractor_func(url)
                     
                     if price is not None:
-                        # Formatează prețul la 2 zecimale
+                        # Formatează prețul la 2 zecimale (ex: "72908.55")
                         price_str = f"{price:.2f}"
-                        
-                        # Calculează litera coloanei de destinație (ex: 9 -> I)
-                        dest_col_letter = gspread.utils.rowcol_to_a1(1, dest_col_idx).split('1')[0]
-                        
-                        # Adaugă Prețul la lista de actualizări
-                        updates.append({
-                            'range': f'{dest_col_letter}{gsheet_row_num}',
-                            'values': [[price_str]]
-                        })
-                        
-                        print(f"      ✅ Succes: {price_str} RON. Scris la {dest_col_letter}{gsheet_row_num}")
-                        
+                        print(f"      ✅ Succes: {price_str} RON. Scris la {cell_range}")
                     else:
+                        price_str = "N/A (SCRAPE ESUAT)"
                         print(f"      ❌ EROARE: Extragerea prețului a eșuat (returnat None) pentru {scraper_name}.")
+                        price = price_str # pentru a adăuga mesajul de eroare în updates
                         
                 except Exception as e:
+                    price_str = f"🛑 EXCEPȚIE ({type(e).__name__})"
                     print(f"      🛑 EXCEPȚIE la scraping pentru {scraper_name}: {e}")
+                    price = price_str
+                    
+                time.sleep(1) # Pauză de 1 secundă între fiecare cerere de scraping (pentru competitori)
+                
+                
+                # --- Adăugare la lista de actualizări ---
+                if price is not None:
+                    # Dacă prețul este un float/int, îl convertim în string pentru a fi scris.
+                    if isinstance(price, (float, int)):
+                            price = f"{price:.2f}"
+                            
+                    updates.append({
+                        'range': cell_range,
+                        'values': [[price]]
+                    })
 
-                time.sleep(1) # Pauză de 1 secundă între fiecare cerere de scraping (protecție împotriva blocării)
 
     # ----------------------------------------
     # Scrierea Batch în Google Sheets (la final)
-
+    
     # Adaugă timestamp-ul final în coloana P pentru toate rândurile procesate
     if updates:
         
@@ -289,8 +314,9 @@ def monitor_and_update_sheet(sheet):
         print(f"\n⚡ Se scriu {len(updates)} actualizări și timestamp-ul ({timestamp_val}) în foaie...")
         
         try:
-            sheet.batch_update(updates)
-            print("🎉 Toate prețurile și timestamp-ul au fost actualizate cu succes!")
+            # ADĂUGAREA CRITICĂ AICI: USER_ENTERED (păstrată din codul original al dvs.)
+            sheet.batch_update(updates, value_input_option='USER_ENTERED')
+            print("🎉 Toate prețurile competitorilor și timestamp-ul au fost actualizate cu succes!")
         except Exception as e:
             print(f"❌ EROARE la scrierea în foaia de calcul: {e}")
     else:
@@ -298,16 +324,15 @@ def monitor_and_update_sheet(sheet):
 
 
 # ----------------------------------------------------
-## 4\. 🏁 Punctul de Intrare
+## 4. 🏁 Punctul de Intrare
 
 if __name__ == "__main__":
     # 1. Inițializează conexiunea
     sheet_client = setup_sheets_client()
     
     if sheet_client:
-        # 2. Rulează monitorizarea și actualizarea foii (Această funcție actualizează coloanele I-O)
+        # 2. Rulează monitorizarea și actualizarea foii (Această funcție actualizează coloanele J-O)
         monitor_and_update_sheet(sheet_client)
         
-        # 3. Odată ce foaia este actualizată și formulele (Q-V) s-au recalculat, 
-        #    rulează logica de alertare
+        # 3. Odată ce foaia este actualizată, rulează logica de alertare
         send_price_alerts(sheet_client)
