@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 
 # --- CONFIGURARE EMAIL (SCHIMBĂ VALORILE CU DATELE TALE) ---
 SENDER_EMAIL = 'mihaistoian889@gmail.com'
-RECEIVER_EMAIL = 'mircea@atvrom.ro'
+RECEIVER_EMAIL = 'octavian@atvrom.ro'
 SMTP_PASSWORD = 'igcu wwbs abit ganm'
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
