@@ -12,7 +12,8 @@ from email.mime.multipart import MIMEMultipart
 SENDER_EMAIL = 'mihaistoian889@gmail.com'
 RECEIVER_EMAILS = [
     'octavian@atvrom.ro',
-    'svmitza89@gmail.com'
+    'administrator@atvrom.ro',
+    'mircea@atvrom.ro'
 ]
 SMTP_PASSWORD = 'igcu wwbs abit ganm'
 SMTP_SERVER = 'smtp.gmail.com'
