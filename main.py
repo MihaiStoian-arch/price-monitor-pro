@@ -10,7 +10,10 @@ from email.mime.multipart import MIMEMultipart
 
 # --- CONFIGURARE EMAIL (SCHIMBĂ VALORILE CU DATELE TALE) ---
 SENDER_EMAIL = 'mihaistoian889@gmail.com'
-RECEIVER_EMAIL = 'mircea@atvrom.ro'
+RECEIVER_EMAILS = [
+    'octavian@atvrom.ro',
+    'svmitza89@gmail.com'
+]
 SMTP_PASSWORD = 'igcu wwbs abit ganm'
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
@@ -91,9 +94,11 @@ def setup_sheets_client():
 def send_alert_email(subject, body):
     """Trimite un email folosind SMTP."""
     try:
+        receiver_string = ", ".join(RECEIVER_EMAILS)
+        
         msg = MIMEMultipart()
         msg['From'] = SENDER_EMAIL
-        msg['To'] = RECEIVER_EMAIL
+        msg['To'] = receiver_string # Folosim șirul de caractere (string) aici
         msg['Subject'] = subject
         # Folosim HTML
         msg.attach(MIMEText(body, 'html')) 
@@ -101,9 +106,9 @@ def send_alert_email(subject, body):
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls() # Secure the connection
         server.login(SENDER_EMAIL, SMTP_PASSWORD)
-        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
+        server.sendmail(SENDER_EMAIL, RECEIVER_EMAILS, msg.as_string())
         server.quit()
-        print(f"✔️ Notificare trimisă cu succes către {RECEIVER_EMAIL}")
+        print(f"✔️ Notificare trimisă cu succes către {RECEIVER_EMAILS}")
         return True
     except Exception as e:
         print(f"❌ Eroare la trimiterea email-ului: {e}")
