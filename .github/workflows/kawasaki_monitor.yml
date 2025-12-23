@@ -8,8 +8,8 @@ name: Price Monitor Kawasaki Daily Run
 # Atentie: 02:00 UTC este 05:00 AM ora Romaniei (in timpul iernii)
 # Daca vrei 02:00 AM ora Romaniei, foloseste 23:00 (11 PM) UTC in ziua precedenta.
 # Voi folosi 02:00 UTC pentru a mentine codul simplu, ajustati ora daca este necesar.
-on:
-  schedule:
+#on:
+  #schedule:
     # Ruleaza la minutul 0, ora 2, in fiecare zi
     - cron: '00 12 * * *' 
   # Permite rularea manuala din interfata GitHub
@@ -18,7 +18,7 @@ on:
 # -------------------------------------------------------------
 # 2. JOBUL PRINCIPAL (Ruleaza pe un server Ubuntu)
 # -------------------------------------------------------------
-jobs:
+#jobs:
   run_scraper:
     # Ruleaza pe cel mai recent server Ubuntu disponibil
     runs-on: ubuntu-latest
