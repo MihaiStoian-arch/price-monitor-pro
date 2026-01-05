@@ -12,7 +12,7 @@ on:
   schedule:
      # Ruleaza la minutul 0, ora 12, in fiecare zi
     - cron: '0 10 * * *' 
-     # Permite rularea manuala din interfata GitHub
+    # Permite rularea manuala din interfata GitHub
   workflow_dispatch:
 
 # -------------------------------------------------------------
@@ -20,7 +20,7 @@ on:
 # -------------------------------------------------------------
 jobs:
   run_scraper:
-     Ruleaza pe cel mai recent server Ubuntu disponibil
+    # Ruleaza pe cel mai recent server Ubuntu disponibil
     runs-on: ubuntu-latest
     
     steps:
