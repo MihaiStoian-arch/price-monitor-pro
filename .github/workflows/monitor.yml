@@ -10,9 +10,9 @@ name: Price Monitor Daily Run
 # Voi folosi 02:00 UTC pentru a mentine codul simplu, ajustati ora daca este necesar.
 on:
   schedule:
-     Ruleaza la minutul 0, ora 12, in fiecare zi
+     # Ruleaza la minutul 0, ora 12, in fiecare zi
     - cron: '0 10 * * *' 
-     Permite rularea manuala din interfata GitHub
+     # Permite rularea manuala din interfata GitHub
   workflow_dispatch:
 
 # -------------------------------------------------------------
