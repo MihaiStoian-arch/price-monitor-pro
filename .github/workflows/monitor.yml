@@ -12,13 +12,13 @@ on:
   schedule:
      Ruleaza la minutul 0, ora 12, in fiecare zi
     - cron: '0 10 * * *' 
-    Permite rularea manuala din interfata GitHub
+     Permite rularea manuala din interfata GitHub
   workflow_dispatch:
 
 # -------------------------------------------------------------
 # 2. JOBUL PRINCIPAL (Ruleaza pe un server Ubuntu)
 # -------------------------------------------------------------
-#jobs:
+jobs:
   run_scraper:
      Ruleaza pe cel mai recent server Ubuntu disponibil
     runs-on: ubuntu-latest
