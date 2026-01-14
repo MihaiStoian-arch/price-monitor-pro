@@ -11,9 +11,8 @@ from email.mime.multipart import MIMEMultipart
 # --- CONFIGURARE EMAIL (SCHIMBĂ VALORILE CU DATELE TALE) ---
 SENDER_EMAIL = 'mihaistoian889@gmail.com'
 RECEIVER_EMAILS = [
-    'octavian@atvrom.ro',
-    'administrator@atvrom.ro',
-    'mircea@atvrom.ro'
+    'mihaistoian889@gmail.com',
+    'svmitza89@gmail.com'
 ]
 SMTP_PASSWORD = 'igcu wwbs abit ganm'
 SMTP_SERVER = 'smtp.gmail.com'
