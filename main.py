@@ -12,7 +12,7 @@ from email.mime.multipart import MIMEMultipart
 SENDER_EMAIL = 'mihaistoian889@gmail.com'
 RECEIVER_EMAILS = [
     'mihaistoian889@gmail.com',
-    'svmitza89@gmail.com'
+    'mircea@atvrom.ro'
 ]
 SMTP_PASSWORD = 'igcu wwbs abit ganm'
 SMTP_SERVER = 'smtp.gmail.com'
